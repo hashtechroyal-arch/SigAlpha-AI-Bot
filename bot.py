@@ -20,7 +20,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
     try:
         chat = groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            chat = groq_client.chat.completions.create(
+    model="openai/gpt-oss-20b",
+    messages=[
+        {"role": "system", "content": "You are SigAlpha bot made by Professor Bunti Royal. Reply in Hinglish, cool and friendly style."},
+        {"role": "user", "content": user_text}
+    ]
+)
             messages=[
                 {"role": "system", "content": "You are SigAlpha bot made by Professor Bunti Royal. Reply in Hinglish, cool and friendly style."},
                 {"role": "user", "content": user_text}
