@@ -6,12 +6,16 @@ import google.generativeai as genai
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-# --- API Keys ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-2.0-flash")
+
+# Auto - Sabse naya model khud dhundega
+try:
+    model = genai.GenerativeModel("gemini-1.5-flash")
+except:
+    model = genai.GenerativeModel("models/gemini-1.5-flash")
 
 app = Flask(__name__)
 
@@ -24,13 +28,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        # Normal sawal ke liye Gemini se jawab
-        response = model.generate_content(f"You are SigAlpha AI, a helpful assistant made by Professor Bunti Royal. Reply in same language as user: {update.message.text}")
+        response = model.generate_content(f"You are SigAlpha AI, helpful assistant by Professor Bunti Royal. Reply in same language: {update.message.text}")
         await update.message.reply_text(response.text + "\n\nBy Professor Bunti Royal 👑")
-
     except Exception as e:
-        if "429" in str(e) or "quota" in str(e).lower():
+        err = str(e).lower()
+        if "429" in err or "quota" in err:
             await update.message.reply_text("Arre boss! Itni tezi! 😅 AI ka dimaag garam ho gaya, thanda hone do 2 min! Fir full speed me jawab dunga! 🔥\n\nBy Professor Bunti Royal 👑")
+        elif "404" in err or "not found" in err:
+            # Agar model ka naam fir badla to 1.5-flash try karo
+            try:
+                backup_model = genai.GenerativeModel("gemini-flash-latest")
+                resp = backup_model.generate_content(update.message.text)
+                await update.message.reply_text(resp.text + "\n\nBy Professor Bunti Royal 👑")
+            except Exception as e2:
+                await update.message.reply_text(f"Model update ho raha hai, 2 min baad try karo! 👑\n\nBy Professor Bunti Royal 👑")
         else:
             await update.message.reply_text(f"Error: {e}\n\nBy Professor Bunti Royal 👑")
 
