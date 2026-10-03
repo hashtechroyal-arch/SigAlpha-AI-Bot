@@ -8,25 +8,37 @@ import google.generativeai as genai
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+OWNER_NAME = "Professor Bunti Royal"
 
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-2.0-flash")
+model = genai.GenerativeModel("gemini-2.5-flash")
 
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "SigAlpha AI Bot is Running! By Professor Bunti Royal"
+    return "SigAlpha AI Bot is Running!"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👑 SigAlpha AI Bot Ready!\nMai All-Rounder hu - Koi bhi sawal pucho!\nBy Professor Bunti Royal")
+    await update.message.reply_text("👑 SigAlpha AI Bot Ready!\nMai All-Rounder hu - Koi bhi sawal pucho!")
 
 async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_msg = update.message.text
+    user_lower = user_msg.lower()
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    
     try:
-        response = model.generate_content(f"You are SigAlpha AI, helpful assistant By Professor Bunti Royal. Reply in same language as user asks. User message: {user_msg}")
+        # Check agar owner ke baare me pucha hai
+        owner_keywords = ["owner", "malik", "kisne banaya", "kisne bnaya", "banaya kisne", "creator", "who made you", "who created", "tumhe kisne banaya", "aapko kisne banaya"]
+        
+        if any(word in user_lower for word in owner_keywords):
+            await update.message.reply_text(f"Mere malik / owner ka naam {OWNER_NAME} hai 👑")
+            return
+
+        # Normal sawal ke liye Gemini se jawab
+        response = model.generate_content(f"You are SigAlpha AI, a helpful assistant. Reply in same language as user. User message: {user_msg}")
         await update.message.reply_text(response.text)
+        
     except Exception as e:
         await update.message.reply_text(f"Error: {e}")
 
@@ -41,16 +53,12 @@ async def run_bot():
     await application.initialize()
     await application.start()
     await application.updater.start_polling()
-    # Keep running
     await asyncio.Event().wait()
 
 def main():
-    # Flask ko alag thread me chalao
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.daemon = True
     flask_thread.start()
-    
-    # Bot ko main thread me chalao
     asyncio.run(run_bot())
 
 if __name__ == "__main__":
