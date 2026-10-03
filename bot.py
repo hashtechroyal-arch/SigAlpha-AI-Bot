@@ -11,7 +11,7 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 OWNER_NAME = "Professor Bunti Royal"
 
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("models/gemini-3.8-flash")
+model = genai.GenerativeModel("models/gemini-1.5-flash")
 
 app = Flask(__name__)
 
@@ -39,8 +39,11 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response = model.generate_content(f"You are SigAlpha AI, a helpful assistant. Reply in same language as user. User message: {user_msg}")
         await update.message.reply_text(response.text)
         
-    except Exception as e:
-        await update.message.reply_text(f"Error: {e}")
+        except Exception as e:
+        if "429" in str(e) or "quota" in str(e).lower():
+            await update.message.reply_text("🔥 Bhai AI thoda thak gaya hai! Daily limit full ho gayi, 2 ghante baad aana!\n\nBy Professor Bunti Royal 👑")
+        else:
+            await update.message.reply_text(f"Error: {e}\n\nBy Professor Bunti Royal 👑")
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
