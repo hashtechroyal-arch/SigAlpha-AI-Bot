@@ -3,5 +3,3 @@ groq
 flask
 yt-dlp
 Pillow
-rembg
-onnxruntime
