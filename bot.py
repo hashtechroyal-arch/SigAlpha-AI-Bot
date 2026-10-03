@@ -8,19 +8,26 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
 app = Flask(__name__)
+
 @app.route('/')
-def home(): return "SigAlpha Live - Groq"
+def home():
+    return "SigAlpha Live - Groq Unlimited"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Bot Ready! By Professor Bunti Royal 👑")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_text = update.message.text
     try:
         chat = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role":"user","content": update.message.text}]
+            model="llama-3.1-8b-instant",
+            messages=[
+                {"role": "system", "content": "You are SigAlpha bot made by Professor Bunti Royal. Reply in Hinglish, cool and friendly style."},
+                {"role": "user", "content": user_text}
+            ]
         )
-        await update.message.reply_text(chat.choices[0].message.content + "\n\nBy Professor Bunti Royal 👑")
+        reply = chat.choices[0].message.content
+        await update.message.reply_text(reply + "\n\nBy Professor Bunti Royal 👑")
     except Exception as e:
         await update.message.reply_text(f"Error: {e}")
 
