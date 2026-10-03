@@ -18,7 +18,7 @@ threading.Thread(target=run_flask, daemon=True).start()
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id == OWNER_ID:
         user_memory[OWNER_ID] = []
-        await update.message.reply_text("Namaste Professor Bunti! 👑 Bot Live hai!")
+        await update.message.reply_text("Namaste Professor Bunti Royal! 👑 Bot Live hai! 🙏")
     else:
         await update.message.reply_text("Aap Bunti nahi ho!")
 
