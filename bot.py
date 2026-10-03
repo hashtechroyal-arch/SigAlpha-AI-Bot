@@ -14,7 +14,7 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
 # --- APNI ID YAHAN DALO @userinfobot se leke ---
-OWNER_ID = int(os.environ.get("OWNER_ID", "123456789"))
+OWNER_ID = int(os.environ.get("OWNER_ID", "1410150440"))
 
 app = Flask(__name__)
 @app.route('/')
