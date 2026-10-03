@@ -1,62 +1,46 @@
-import os
-import asyncio
-import threading
+import os, asyncio, threading, itertools
 from flask import Flask
 import google.generativeai as genai
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-
-genai.configure(api_key=GEMINI_API_KEY)
-
-# Auto - Sabse naya model khud dhundega
-try:
-    model = genai.GenerativeModel("gemini-1.5-flash")
-except:
-    model = genai.GenerativeModel("models/gemini-1.5-flash")
+API_KEYS = [os.environ.get("GEMINI_API_KEY"), os.environ.get("GEMINI_API_KEY2")]
+API_KEYS = [k for k in API_KEYS if k]
+key_cycle = itertools.cycle(API_KEYS)
 
 app = Flask(__name__)
-
 @app.route('/')
-def home():
-    return "Bot is Live! By Professor Bunti Royal 👑"
+def home(): return "Bot Live - Bunti Royal"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Namaste! 🙏 Main SigAlpha AI hoon. Aapka swagat hai!\n\nBy Professor Bunti Royal 👑")
+    await update.message.reply_text("Bot Ready! By Professor Bunti Royal 👑")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        response = model.generate_content(f"You are SigAlpha AI, helpful assistant by Professor Bunti Royal. Reply in same language: {update.message.text}")
-        await update.message.reply_text(response.text + "\n\nBy Professor Bunti Royal 👑")
-    except Exception as e:
-        err = str(e).lower()
-        if "429" in err or "quota" in err:
-            await update.message.reply_text("Arre boss! Itni tezi! 😅 AI ka dimaag garam ho gaya, thanda hone do 2 min! Fir full speed me jawab dunga! 🔥\n\nBy Professor Bunti Royal 👑")
-        elif "404" in err or "not found" in err:
-            # Agar model ka naam fir badla to 1.5-flash try karo
-            try:
-                backup_model = genai.GenerativeModel("gemini-flash-latest")
-                resp = backup_model.generate_content(update.message.text)
-                await update.message.reply_text(resp.text + "\n\nBy Professor Bunti Royal 👑")
-            except Exception as e2:
-                await update.message.reply_text(f"Model update ho raha hai, 2 min baad try karo! 👑\n\nBy Professor Bunti Royal 👑")
-        else:
-            await update.message.reply_text(f"Error: {e}\n\nBy Professor Bunti Royal 👑")
+    for _ in range(5):
+        try:
+            key = next(key_cycle)
+            genai.configure(api_key=key)
+            # Sabse stable model - ye kabhi band nahi hota
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            response = model.generate_content(update.message.text)
+            await update.message.reply_text(response.text + "\n\nBy Professor Bunti Royal 👑")
+            return
+        except Exception as e:
+            print(f"Key failed: {e}") # Render logs me dikhega
+            continue
+    
+    await update.message.reply_text("Bhai 2 min ruk ja, dono key thodi garam ho gayi! 😅\n\nBy Professor Bunti Royal 👑")
 
 def run_flask():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
 
 async def run_bot():
     application = Application.builder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling()
-    await asyncio.Event().wait()
+    await application.initialize(); await application.start()
+    await application.updater.start_polling(); await asyncio.Event().wait()
 
 if __name__ == "__main__":
     threading.Thread(target=run_flask).start()
