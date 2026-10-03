@@ -1,3 +1,7 @@
-python-telegram-bot==20.7
-Flask
+python-telegram-bot==21.0.1
 groq
+flask
+yt-dlp
+Pillow
+rembg
+onnxruntime
