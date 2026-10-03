@@ -2,43 +2,35 @@ import os
 import asyncio
 import threading
 from flask import Flask
+import google.generativeai as genai
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-import google.generativeai as genai
 
-# --- CONFIG ---
+# --- API Keys ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-OWNER_NAME = os.environ.get("OWNER_NAME", "Professor Bunti Royal")
 
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-flash-latest")
+model = genai.GenerativeModel("gemini-2.0-flash")
 
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "SigAlpha AI Bot is Live! By Professor Bunti Royal 👑"
+    return "Bot is Live! By Professor Bunti Royal 👑"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(f"Namaste! Mai SigAlpha AI hu!\nBy {OWNER_NAME} 👑")
+    await update.message.reply_text("Namaste! 🙏 Main SigAlpha AI hoon. Aapka swagat hai!\n\nBy Professor Bunti Royal 👑")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        user_message = update.message.text
-
-        # Owner ka sawal
-        if "owner" in user_message.lower() or "malik" in user_message.lower():
-            await update.message.reply_text(f"Mere malik / owner ka naam {OWNER_NAME} hai 👑")
-            return
-
         # Normal sawal ke liye Gemini se jawab
-        response = model.generate_content(f"You are SigAlpha AI, a helpful assistant. Reply in same language as user. User message: {user_message}")
-        await update.message.reply_text(response.text)
+        response = model.generate_content(f"You are SigAlpha AI, a helpful assistant made by Professor Bunti Royal. Reply in same language as user: {update.message.text}")
+        await update.message.reply_text(response.text + "\n\nBy Professor Bunti Royal 👑")
 
     except Exception as e:
         if "429" in str(e) or "quota" in str(e).lower():
-            await update.message.reply_text("🔥 Bhai AI thoda thak gaya hai! Daily limit full ho gayi, 2 ghante baad aana!\n\nBy Professor Bunti Royal 👑")
+            await update.message.reply_text("Arre boss! Itni tezi! 😅 AI ka dimaag garam ho gaya, thanda hone do 2 min! Fir full speed me jawab dunga! 🔥\n\nBy Professor Bunti Royal 👑")
         else:
             await update.message.reply_text(f"Error: {e}\n\nBy Professor Bunti Royal 👑")
 
