@@ -86,7 +86,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         messages = [{"role": "system", "content": system_prompt}] + user_memory[OWNER_ID][-12:]
 
         completion = groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model="llama-3.3-70b-versatile",
             messages=messages,
             temperature=0.8,
             max_tokens=1024
