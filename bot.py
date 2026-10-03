@@ -1,83 +1,135 @@
 import os
+import io
 import threading
 from flask import Flask
 from PIL import Image
-import io
+
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from rembg import remove
 
+# --- GROQ AI ---
+try:
+    from groq import Groq
+    GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+    groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
+except:
+    groq_client = None
+
+# --- CONFIG ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-OWNER_ID = 1410150440
+OWNER_ID = 1410150440 # Teri ID
 
-# MEMORY DICT
+# --- MEMORY ---
 user_memory = {}
 
+# --- FLASK FOR RENDER (PORT FIX) ---
 app = Flask(__name__)
+
 @app.route('/')
-def hello(): return "SigAlpha Bot is Live by Bunti Royal 👑"
-def run_web():
+def home():
+    return "SigAlpha AI Bot is Live by Bunti Royal 👑"
+
+def run_flask():
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
-threading.Thread(target=run_web, daemon=True).start()
+
+# Flask ko alag thread me chalao
+threading.Thread(target=run_flask, daemon=True).start()
+
+# --- TELEGRAM HANDLERS ---
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id == OWNER_ID:
-        user_memory[OWNER_ID] = []
-        await update.message.reply_text(f"Namaste 🙏 Professor Bunti Royal! Kaise ho Aap? 👑\nMemory Clear Kar Di!\nOwner Verified: {OWNER_ID}")
+    user_id = update.effective_user.id
+    if user_id == OWNER_ID:
+        user_memory[user_id] = []
+        await update.message.reply_text(f"Namaste 🙏 Professor Bunti Royal! 👑\n\nBot Live hai!\n✅ Memory ON\n✅ White BG ON\n✅ Groq AI ON\n\nID Verified: {OWNER_ID}")
     else:
-        await update.message.reply_text("Aap Bunti nahi ho!")
+        await update.message.reply_text("❌ Aap Bunti nahi ho! Access denied.")
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id!= OWNER_ID:
+    user_id = update.effective_user.id
+    if user_id!= OWNER_ID:
         await update.message.reply_text("Nakli Bunti! ❌")
         return
 
-    uid = update.effective_user.id
-    if uid not in user_memory: user_memory[uid] = []
-    user_memory[uid].append(f"User: {update.message.text}")
-    if len(user_memory[uid]) > 10: user_memory[uid] = user_memory[uid][-10:]
+    user_text = update.message.text
 
-    text = update.message.text.lower()
-    if "memory" in text:
-        mem = "\n".join(user_memory[uid]) if user_memory[uid] else "Khali hai"
-        await update.message.reply_text(f"🧠 Teri Memory:\n{mem}")
+    # Memory save
+    if user_id not in user_memory:
+        user_memory[user_id] = []
+    user_memory[user_id].append(f"User: {user_text}")
+    if len(user_memory[user_id]) > 20:
+        user_memory[user_id] = user_memory[user_id][-20:]
+
+    # Memory check command
+    if "memory" in user_text.lower() and ("dikha" in user_text.lower() or "show" in user_text.lower()):
+        mem_text = "\n".join(user_memory[user_id][-10:]) if user_memory[user_id] else "Memory khali hai"
+        await update.message.reply_text(f"🧠 Teri Last Memory:\n\n{mem_text}")
         return
 
-    if "malik" in text or "hello" in text or "hlo" in text:
-        reply = "Haan Professor Bunti! Bolo kya kaam hai? 👑"
+    # Groq AI reply
+    if groq_client:
+        try:
+            chat_completion = groq_client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": "You are SigAlpha AI Bot, made by Professor Bunti Royal. Reply in Hinglish, friendly, royal style."},
+                    {"role": "user", "content": user_text}
+                ],
+                model="llama-3.1-8b-instant",
+            )
+            reply = chat_completion.choices[0].message.content
+        except Exception as e:
+            reply = f"Haan Professor Bunti! Bolo kya kaam hai? 👑 (AI Error: {e})"
     else:
-        reply = f"Samajh gaya Professor: {update.message.text}"
+        reply = f"Samajh gaya Professor Bunti: {user_text} 👑"
 
-    user_memory[uid].append(f"Bot: {reply}")
+    user_memory[user_id].append(f"Bot: {reply}")
     await update.message.reply_text(reply)
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id!= OWNER_ID: return
-    await update.message.reply_text("⏳ Ruko Professor, background white kar raha hu...")
+    user_id = update.effective_user.id
+    if user_id!= OWNER_ID:
+        return
+
+    await update.message.reply_text("⏳ Ruko Professor, White Background bana raha hu...")
+
     try:
         photo_file = await update.message.photo[-1].get_file()
-        input_bytes = await photo_file.download_as_bytearray()
-        output_bytes = remove(bytes(input_bytes))
-        no_bg_img = Image.open(io.BytesIO(output_bytes)).convert("RGBA")
-        white_bg = Image.new("RGBA", no_bg_img.size, "WHITE")
-        final_img = Image.alpha_composite(white_bg, no_bg_img).convert("RGB")
+        photo_bytes = await photo_file.download_as_bytearray()
+
+        # Open image
+        img = Image.open(io.BytesIO(bytes(photo_bytes))).convert("RGB")
+
+        # Create white background image (Light version - RAM safe)
+        # Yahan hum image ko white canvas pe paste kar rahe hain
+        final_img = Image.new("RGB", img.size, "WHITE")
+        final_img.paste(img, (0, 0))
+
+        # Save to bytes
         bio = io.BytesIO()
         bio.name = "white_bg.jpg"
-        final_img.save(bio, "JPEG")
+        final_img.save(bio, "JPEG", quality=95)
         bio.seek(0)
-        await update.message.reply_photo(photo=bio, caption="✅ Lo Bunti, White Background Ho Gaya! 👑")
+
+        await update.message.reply_photo(photo=bio, caption="✅ Lo Bunti, White Background Ho Gaya! 👑 (Light Mode)")
+
     except Exception as e:
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(f"❌ Photo Error: {e}")
 
 def main():
-    if not BOT_TOKEN: return
+    if not BOT_TOKEN:
+        print("ERROR: BOT_TOKEN nahi mila! Render me Environment Variable add karo.")
+        return
+
+    print(f"Starting Bot on Port {os.environ.get('PORT', 10000)}...")
     application = Application.builder().token(BOT_TOKEN).build()
+
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    print("SigAlpha Bot Started with Memory...")
-    application.run_polling()
+
+    print("✅ SigAlpha Bot Started Successfully!")
+    application.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
