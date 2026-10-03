@@ -11,29 +11,22 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "SigAlpha Live - Groq Unlimited"
+    return "SigAlpha Live"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Bot Ready! By Professor Bunti Royal 👑")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_text = update.message.text
     try:
-        chat = groq_client.chat.completions.create(
-            chat = groq_client.chat.completions.create(
-    model="openai/gpt-oss-20b",
-    messages=[
-        {"role": "system", "content": "You are SigAlpha bot made by Professor Bunti Royal. Reply in Hinglish, cool and friendly style."},
-        {"role": "user", "content": user_text}
-    ]
-)
+        response = groq_client.chat.completions.create(
+            model="openai/gpt-oss-20b",
             messages=[
-                {"role": "system", "content": "You are SigAlpha bot made by Professor Bunti Royal. Reply in Hinglish, cool and friendly style."},
-                {"role": "user", "content": user_text}
+                {"role": "system", "content": "You are SigAlpha bot by Professor Bunti Royal. Reply in Hinglish."},
+                {"role": "user", "content": update.message.text}
             ]
         )
-        reply = chat.choices[0].message.content
-        await update.message.reply_text(reply + "\n\nBy Professor Bunti Royal 👑")
+        ans = response.choices[0].message.content
+        await update.message.reply_text(ans + "\n\nBy Professor Bunti Royal 👑")
     except Exception as e:
         await update.message.reply_text(f"Error: {e}")
 
