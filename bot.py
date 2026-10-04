@@ -24,7 +24,13 @@ genai.configure(api_key=GEMINI_API_KEY)
 gemini_model = genai.GenerativeModel('gemini-1.5-flash')
 
 # Groq Setup
-groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
+groq_client = None
+if GROQ_API_KEY:
+    try:
+        groq_client = Groq(api_key=GROQ_API_KEY)
+    except Exception as e:
+        print(f"Groq init failed, will use Gemini only: {e}")
+        groq_client = None
 
 # Memory - Super Brain
 USER_MEMORY = {}
