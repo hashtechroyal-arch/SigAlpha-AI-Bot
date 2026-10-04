@@ -12,33 +12,46 @@ OWNER_ID = int(os.getenv("OWNER_ID"))
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 groq_client = Groq(api_key=GROQ_API_KEY)
-print("Groq Client Ready! Key:", GROQ_API_KEY[:10] + "...")
+print("Groq Client Ready! Key:", GROQ_API_KEY[:12] + "...")
 
-def is_owner(uid): return uid == OWNER_ID
-def get_name(user): return "Professor Bunti Royal Ji 👑" if is_owner(user.id) else user.first_name
+def is_owner(uid):
+    return uid == OWNER_ID
+
+def get_name(user):
+    return "Professor Bunti Royal Ji 👑" if is_owner(user.id) else user.first_name
 
 def ask_groq_sync(text, name):
     try:
         print(f"Asking Groq: {text}")
-        c = groq_client.chat.completions.create(
+        completion = groq_client.chat.completions.create(
             model="llama3-8b-8192",
-            messages=[{"role":"user","content":f"You are SigAlpha AI by Professor Bunti Royal. Owner is Professor Bunti Royal. User {name} says: {text}. Reply in Hinglish, helpful."}]
+            messages=[
+                {"role": "system", "content": "You are SigAlpha AI, created by Professor Bunti Royal. Owner is ONLY Professor Bunti Royal. Reply in Hinglish, friendly, helpful, a bit funny. Always end with By Professor Bunti Royal 👑"},
+                {"role": "user", "content": f"{name} says: {text}"}
+            ],
+            temperature=0.7,
+            max_tokens=1024
         )
-        ans = c.choices[0].message.content
-        print(f"Groq Reply: {ans[:100]}")
+        ans = completion.choices[0].message.content
+        print(f"Groq Reply OK: {ans[:100]}")
         return ans + "\n\nBy Professor Bunti Royal 👑"
     except Exception as e:
         print(f"!!! GROQ ERROR!!! {e}")
-        return f"Ha {name}! Groq me error aaya: {e}. Par main hu na! '{text}' ke baare me detail me batao?\n\nBy Professor Bunti Royal 👑"
+        return f"Are {name}! 😊 Thoda issue aaya: {e}\nPar batao '{text}' me kya help chahiye? Main hu na!\n\nBy Professor Bunti Royal 👑"
 
 def make_thumb(text):
     img = Image.new('RGB', (1280,720), color=(12,12,30))
     d = ImageDraw.Draw(img)
-    try: f = ImageFont.truetype("DejaVuSans-Bold.ttf", 75)
-    except: f = ImageFont.load_default()
+    try:
+        f = ImageFont.truetype("DejaVuSans-Bold.ttf", 75)
+    except:
+        f = ImageFont.load_default()
     d.rectangle([40,180,1240,560], outline=(255,215,0), width=6)
     d.text((640,360), text[:70], font=f, fill=(255,215,0), anchor="mm", stroke_width=4, stroke_fill=(0,0,0))
-    bio = io.BytesIO(); img.save(bio, 'PNG'); bio.seek(0); return bio
+    bio = io.BytesIO()
+    img.save(bio, 'PNG')
+    bio.seek(0)
+    return bio
 
 app = Client("SigAlphaBot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
@@ -46,29 +59,51 @@ app = Client("SigAlphaBot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKE
 async def start_cmd(_, m):
     print(f"START from {m.from_user.id}")
     name = get_name(m.from_user)
-    txt = f"Hello {name}! 👋\n\nYo! SigAlpha Yaha Hai 🔥\n\n👑 Owner: Professor Bunti Royal ✨"
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("👑 Owner Kaun Hai?", callback_data="owner")]])
+    txt = f"Hello {name}! 👋\n\nYo! SigAlpha Yaha Hai 🔥\nAapka AI best friend! Koi bhi sawal pucho!\n\n👑 Owner: Professor Bunti Royal ✨\nCivil Engineer 👷‍♂️ | Genius Developer 🧠\n\nMeri Soch: 🎯 सफलता का कोई शॉर्टकट नहीं होता।\n\nBy Professor Bunti Royal 👑"
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("👑 Owner Kaun Hai?", callback_data="owner")],[InlineKeyboardButton("🎨 Thumbnail Banao", callback_data="thumb")]])
     await m.reply_text(txt, reply_markup=kb)
+
+@app.on_message(filters.command(["thumbnail","thumb","banner"]))
+async def thumb_cmd(_, m):
+    if len(m.command) < 2:
+        return await m.reply_text("Likho: /thumbnail Pushpa 2 Review")
+    bio = make_thumb(m.text.split(None,1)[1])
+    await app.send_photo(m.chat.id, bio, caption=f"✅ Thumbnail Ready!\n\nBy Professor Bunti Royal 👑")
 
 @app.on_callback_query()
 async def cb(_, q):
-    await q.message.reply_text("👑 Mere Malik Professor Bunti Royal hain! ✨")
+    if q.data == "owner":
+        await q.message.reply_text("👑 **Mere Malik / Creator** 👑\n\n**Name: Professor Bunti Royal ✨**\n**Civil Engineer 👷‍♂️ | Genius Developer 🧠**\n\nYe ladka dil ka bahut hi acha aur sabka chaheta hai ❤️ Ek sachcha Genius hai!\n\nMeri Soch: 🎯 सफलता का कोई शॉर्टकट नहीं होता।\n\nBy Professor Bunti Royal 👑")
+    else:
+        await q.message.reply_text("🎨 /thumbnail Aapka Text\n\nExample: /thumbnail Python Tutorial\n\nBy Professor Bunti Royal 👑")
 
-@app.on_message(filters.private)
+@app.on_message(filters.private & ~filters.command(["start","thumbnail","thumb","banner"]))
 async def chat_cmd(_, m):
-    if m.text.startswith("/"): return
+    if not m.text:
+        return
     print(f"MSG RECEIVED: {m.text} from {m.from_user.id}")
+    low = m.text.lower()
+    if "owner kaun" in low or "malik kaun" in low or "kisne banaya" in low or low.strip() in ["owner","malik"]:
+        return await m.reply_text("👑 Mera Owner / Creator sirf **Professor Bunti Royal** hai! Wahi mere Malik hain!\n\nBy Professor Bunti Royal 👑")
     try:
+        await app.send_chat_action(m.chat.id, 1)
         name = get_name(m.from_user)
         ans = await asyncio.to_thread(ask_groq_sync, m.text, name)
+        print(f"REPLYING NOW...")
         await m.reply_text(ans)
     except Exception as e:
         print(f"CHAT ERROR: {e}")
-        await m.reply_text(f"Error: {e}")
+        await m.reply_text(f"Ha {m.from_user.first_name}! Bolo kya help chahiye? 😊\n\nError: {e}\n\nBy Professor Bunti Royal 👑")
 
 web = Flask(__name__)
 @web.route('/')
-def home(): return "SigAlpha Running"
-threading.Thread(target=lambda: web.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000))), daemon=True).start()
-print("SigAlpha AI Starting... By Professor Bunti Royal")
+def home():
+    return "SigAlpha Running By Professor Bunti Royal 👑"
+
+def run_web():
+    web.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
+
+threading.Thread(target=run_web, daemon=True).start()
+
+print("SigAlpha AI Starting... By Professor Bunti Royal 👑")
 app.run()
