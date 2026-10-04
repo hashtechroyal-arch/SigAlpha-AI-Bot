@@ -5,39 +5,57 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import google.generativeai as genai
 from PIL import Image, ImageDraw, ImageFont
 
-# Config from Render Env
+# --- CONFIG FROM RENDER ---
 API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OWNER_ID = int(os.getenv("OWNER_ID"))
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_API_KEY2 = os.getenv("GEMINI_API_KEY2")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
+# Gemini
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-# Groq safe
+# Groq - Main AI
 groq_client = None
-if os.getenv("GROQ_API_KEY"):
+if GROQ_API_KEY:
     try:
         from groq import Groq
-        groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-    except: groq_client = None
+        groq_client = Groq(api_key=GROQ_API_KEY)
+        print("Groq Connected!")
+    except Exception as e:
+        print(f"Groq Fail: {e}")
 
-def is_owner(uid): return uid == OWNER_ID
+def is_owner(uid):
+    return uid == OWNER_ID
+
+def get_name(user):
+    return "Professor Bunti Royal Ji 👑" if is_owner(user.id) else user.first_name
+
+START_LIST = [
+    "Hey! Main hoon SigAlpha AI 🚀\nAapka Super Intelligent Dost!\nKuch bhi pucho! Thumbnail, coding, life advice sab!",
+    "Namaste! ✨ SigAlpha AI Live Hai!\nMain har sawal ka jawab de sakta hu! Bore hone ka tension hi nahi!",
+    "Yo! SigAlpha Yaha Hai 🔥\nAapka AI best friend! Koi bhi sawal pucho, maza ayega!"
+]
 
 async def ask_ai(text, uid, name):
-    is_prof = is_owner(uid)
-    prompt = f"""
-    You are SigAlpha AI. Creator: Professor Bunti Royal.
-    Owner ID is {OWNER_ID}. Owner is ONLY Professor Bunti Royal. Never make anyone else owner.
-    If user is owner ({is_prof}), call him 'Professor Bunti Royal Ji 👑' with respect. Else call by name {name}.
-    Talk like best friend, friendly, funny, never boring. Use Hinglish if user uses Hindi.
-    You have super brain memory. You can help with anything.
-    If asked about thumbnail/banner, tell user to use /thumbnail <text>.
-    End every answer with line: By Professor Bunti Royal 👑
-    User ({name}): {text}
-    """
+    prompt = f"You are SigAlpha AI. Creator is Professor Bunti Royal. Owner ID {OWNER_ID}. Owner ONLY Professor Bunti Royal. Never make anyone else owner. Be friendly, helpful, funny, like best friend. Use Hinglish if user uses Hindi. User {name} says: {text}. End with - By Professor Bunti Royal"
+
+    # 1. Groq Try
+    if groq_client:
+        try:
+            c = groq_client.chat.completions.create(model="llama-3.1-8b-instant", messages=[{"role":"user","content":prompt}])
+            return c.choices[0].message.content
+        except:
+            try:
+                c = groq_client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role":"user","content":prompt}])
+                return c.choices[0].message.content
+            except Exception as e:
+                print(f"Groq Error: {e}")
+
+    # 2. Gemini Try
     try:
         r = model.generate_content(prompt)
         if r.text: return r.text
@@ -49,13 +67,11 @@ async def ask_ai(text, uid, name):
                 r2 = m2.generate_content(prompt)
                 genai.configure(api_key=GEMINI_API_KEY)
                 if r2.text: return r2.text
-            except: genai.configure(api_key=GEMINI_API_KEY)
-    if groq_client:
-        try:
-            c = groq_client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role":"user","content":prompt}])
-            return c.choices[0].message.content
-        except: pass
-    return "Arre thoda issue aa gaya, ek baar fir se bolo Professor Ji! 😅\n\nBy Professor Bunti Royal 👑"
+            except:
+                genai.configure(api_key=GEMINI_API_KEY)
+
+    # 3. Guarantee Reply - Kabhi Fail Nahi
+    return f"Ha {name}! 😊 Aapne '{text}' bola! Iske baare me detail me batao main full help karunga!\n\nBy Professor Bunti Royal 👑"
 
 def make_thumb(text):
     img = Image.new('RGB', (1280,720), color=(12,12,30))
@@ -68,17 +84,12 @@ def make_thumb(text):
 
 app = Client("SigAlphaBot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-START_LIST = [
-    "Main hoon SigAlpha AI 🚀 Aapka Super Dost! Koi bhi sawal pucho!",
-    "Namaste! ✨ SigAlpha AI is Live! Thumbnail, Banner, Chat sab karunga!",
-    "Yo! SigAlpha Yaha Hai 🔥 Bore hone ka chance hi nahi!"
-]
-
 @app.on_message(filters.command("start"))
 async def start_cmd(_, m):
-    name = "Professor Bunti Royal Ji 👑" if is_owner(m.from_user.id) else m.from_user.first_name
-    txt = f"Hello {name}! 👋\n\n{random.choice(START_LIST)}\n\n👑 Owner: Professor Bunti Royal\n\nBy Professor Bunti Royal 👑"
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("👑 Owner Kaun Hai?", callback_data="owner")],[InlineKeyboardButton("🎨 Thumbnail Help", callback_data="thumb")]])
+    name = get_name(m.from_user)
+    welcome = random.choice(START_LIST)
+    txt = f"Hello {name}! 👋\n\n{welcome}\n\n👑 Owner: Professor Bunti Royal ✨\nCivil Engineer 👷‍♂️ | Genius Developer 🧠\n\nMeri Soch: 🎯 सफलता का कोई शॉर्टकट नहीं होता।\n\nBy Professor Bunti Royal 👑"
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("👑 Owner Kaun Hai?", callback_data="owner")],[InlineKeyboardButton("🎨 Thumbnail Banao", callback_data="thumb")]])
     await m.reply_text(txt, reply_markup=kb)
 
 @app.on_message(filters.command(["thumbnail","thumb","banner"]))
@@ -94,19 +105,21 @@ async def cb(_, q):
     else:
         await q.message.reply_text("🎨 Thumbnail banane ke liye:\n`/thumbnail Aapka Text`\nEx: `/thumbnail My First Vlog`\n\nBy Professor Bunti Royal 👑")
 
-@app.on_message(filters.text & ~filters.command(["start","thumbnail","thumb","banner"]))
+@app.on_message(filters.text)
 async def chat_cmd(_, m):
-    if "owner" in m.text.lower() or "malik" in m.text.lower() or "kisne banaya" in m.text.lower():
+    if m.text.startswith("/"): return
+    low = m.text.lower()
+    if "owner kaun" in low or "malik kaun" in low or "kisne banaya" in low or low.strip() in ["owner","malik"]:
         return await m.reply_text("👑 Mera Owner / Creator sirf **Professor Bunti Royal** hai! Wahi mere Malik hain!\n\nBy Professor Bunti Royal 👑")
     await app.send_chat_action(m.chat.id, 1)
     name = "Professor Bunti Royal Ji" if is_owner(m.from_user.id) else m.from_user.first_name
     ans = await ask_ai(m.text, m.from_user.id, name)
     await m.reply_text(ans)
 
-# Web server to keep Render alive
+# Web Server for Render
 web = Flask(__name__)
 @web.route('/')
-def home(): return "SigAlpha AI Running - By Professor Bunti Royal 👑"
+def home(): return "SigAlpha AI Bot Running - By Professor Bunti Royal 👑"
 threading.Thread(target=lambda: web.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000))), daemon=True).start()
 
 print("SigAlpha AI Starting... By Professor Bunti Royal")
