@@ -1,86 +1,71 @@
-import os, random, threading, logging
+import os, threading, logging
 from flask import Flask
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
-from groq import Groq
-import google.generativeai as genai
 
 flask_app = Flask(__name__)
 @flask_app.route('/')
-def home(): return "SigAlpha V9 NEVER FAIL LIVE! 👑🧠♾️🔥"
-def run_flask():
-    port = int(os.getenv("PORT", 8080))
-    flask_app.run(host='0.0.0.0', port=port)
+def home(): return "V11 DEBUG LIVE 👑"
+def run_flask(): flask_app.run(host='0.0.0.0', port=int(os.getenv("PORT", 8080)))
 threading.Thread(target=run_flask, daemon=True).start()
 
-logging.basicConfig(level=logging.INFO)
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_API_KEY2 = os.getenv("GEMINI_API_KEY2")
-OWNER_ID = int(os.getenv("OWNER_ID", "0"))
+BOT_TOKEN = os.getenv("BOT_TOKEN","").strip()
+GROQ_KEY = (os.getenv("GROQ_API_KEY") or "").strip()
+GEM_KEY = (os.getenv("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY2") or "").strip()
 
-client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
-gemini_keys = [k for k in [GEMINI_API_KEY, GEMINI_API_KEY2] if k]
-if gemini_keys:
-    genai.configure(api_key=gemini_keys[0])
+print(f"KEYS CHECK: BOT={len(BOT_TOKEN)} GROQ={len(GROQ_KEY)} GEM={len(GEM_KEY)}")
 
-user_memory = {}
-SYSTEM_PROMPT = "Tu SigAlpha V9 hai. Professor Bunti Royal ji ka banaya SUPER BRAIN hai. Tu Hindi + Hinglish me izzat se AAP karke baat karta hai. Kabhi ** ka use mat karna. Har jawab ke end me ye line likhna: - Professor Bunti Royal 👑"
+gemini_model = None
+groq_client = None
 
-async def ask_ai(uid, name, text):
-    if uid not in user_memory: user_memory[uid]=[]
-    user_memory[uid].append(f"User: {text}")
-    if len(user_memory[uid])>150: user_memory[uid]=user_memory[uid][-150:]
-    hist = "\n".join(user_memory[uid][-12:])
-    full_prompt = f"{SYSTEM_PROMPT}\nHistory:{hist}\nUser Sawal:{text}\nJawab Hindi me do:"
+try:
+    if GEM_KEY:
+        import google.generativeai as genai
+        genai.configure(api_key=GEM_KEY)
+        gemini_model = genai.GenerativeModel("gemini-2.0-flash")
+        print("GEMINI MODEL READY")
+except Exception as e: print(f"GEM INIT FAIL: {e}")
 
-    # 1. GROQ TRY
-    if client:
-        for model in ["llama-3.1-8b-instant", "llama-3.3-70b-versatile", "qwen-2.5-32b"]:
-            try:
-                c = client.chat.completions.create(model=model, messages=[{"role":"user","content":full_prompt}], max_tokens=2000, temperature=0.8)
-                ans = c.choices[0].message.content
-                user_memory[uid].append(f"Bot:{ans}")
-                print(f"GROQ OK {model}")
-                return ans
-            except Exception as e:
-                print(f"GROQ FAIL {model}: {e}")
-                continue
+try:
+    if GROQ_KEY:
+        from groq import Groq
+        groq_client = Groq(api_key=GROQ_KEY)
+        print("GROQ READY")
+except Exception as e: print(f"GROQ INIT FAIL: {e}")
 
-    # 2. GEMINI TRY - YE PAKKA CHALEGA
-    for key in gemini_keys:
+async def ask_ai(text):
+    # 1. GEMINI
+    if gemini_model:
         try:
-            genai.configure(api_key=key)
-            model = genai.GenerativeModel("gemini-1.5-flash")
-            resp = model.generate_content(full_prompt)
-            ans = resp.text
-            user_memory[uid].append(f"Bot:{ans}")
-            print(f"GEMINI OK with key {key[:10]}")
-            return ans
+            res = gemini_model.generate_content(f"Tu SigAlpha hai, Professor Bunti Royal ka bot hai. Hindi me izzat se jawab de. Sawal: {text}")
+            return res.text + "\n\n- Professor Bunti Royal 👑"
         except Exception as e:
-            print(f"GEMINI FAIL key {key[:10]}: {e}")
-            continue
+            err = str(e)
+            print(f"GEMINI FAIL: {err}")
+            # Agar API key invalid hai to yahi dikhega
+            if "API_KEY_INVALID" in err or "403" in err or "400" in err:
+                return f"⚠️ Bhai GEMINI KEY me dikkat hai: {err[:200]}\nNayi key banao aistudio.google.com se\n\n- Professor Bunti Royal 👑"
 
-    return f"🙏 Maaf kijiye {name} ji, thoda server busy hai 😔 30 sec baad fir bhejiye Aap, main pakka jawab dunga 🔥\n\n- Professor Bunti Royal 👑"
+    # 2. GROQ
+    if groq_client:
+        try:
+            c = groq_client.chat.completions.create(model="llama-3.1-8b-instant", messages=[{"role":"user","content":text}], max_tokens=1000)
+            return c.choices[0].message.content + "\n\n- Professor Bunti Royal 👑"
+        except Exception as e:
+            print(f"GROQ FAIL: {e}")
+
+    return "🙏 Bhai abhi AI thoda thak gaya hai, 30 sec me fir bhejo. Key ka issue hai, Render Logs me GEMINI FAIL dekho\n\n- Professor Bunti Royal 👑"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(f"Namaste 🙏 {update.effective_user.first_name} ji 👑\n\nSigAlpha V9 SUPER BRAIN LIVE ho gaya 🧠♾️🔥\nAb bolo kya karna hai?\n\n- Professor Bunti Royal 👑")
-
-async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_memory[update.effective_user.id]=[]
-    await update.message.reply_text("Memory clear ho gayi ji 🧹♾️\n\n- Professor Bunti Royal 👑")
-
+    await update.message.reply_text(f"Namaste {update.effective_user.first_name} ji 🙏 V11 LIVE hai 🔥\n\n- Professor Bunti Royal 👑")
 async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    ans = await ask_ai(update.effective_user.id, update.effective_user.first_name, update.message.text)
+    ans = await ask_ai(update.message.text)
     await update.message.reply_text(ans)
 
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("clear", clear))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat))
-    print("V9 NEVER FAIL LIVE!")
     app.run_polling()
 
 if __name__ == '__main__': main()
