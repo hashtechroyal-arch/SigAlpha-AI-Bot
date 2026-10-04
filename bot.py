@@ -1,102 +1,29 @@
-import os, io, threading, asyncio
-from flask import Flask
-from pyrogram import Client, filters, enums
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from PIL import Image, ImageDraw, ImageFont
-from groq import Groq
-
-# ENV
-API_ID = int(os.getenv("API_ID"))
-API_HASH = os.getenv("API_HASH")
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-OWNER_ID = int(os.getenv("OWNER_ID"))
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-
-groq_client = Groq(api_key=GROQ_API_KEY)
-print("Groq Client Ready! Key:", GROQ_API_KEY[:12] + "...")
-
-def is_owner(uid):
-    return uid == OWNER_ID
-
-def get_name(user):
-    return "Professor Bunti Royal Ji 👑" if is_owner(user.id) else user.first_name
-
-def ask_groq_sync(text, name):
-    try:
-        print(f"Asking Groq: {text}")
-        completion = groq_client.chat.completions.create(
-            model="llama3-8b-8192",
-            messages=[
-                {"role": "system", "content": "You are SigAlpha AI, created by Professor Bunti Royal. Owner is ONLY Professor Bunti Royal. He is Civil Engineer and Genius Developer. User name is provided. Reply in Hinglish, friendly, helpful. Always end with By Professor Bunti Royal 👑"},
-                {"role": "user", "content": f"{name} says: {text}"}
-            ],
-            temperature=0.7,
-            max_tokens=1024
-        )
-        ans = completion.choices[0].message.content
-        print(f"Groq OK: {ans[:80]}")
-        return ans + "\n\nBy Professor Bunti Royal 👑"
-    except Exception as e:
-        print(f"!!! GROQ ERROR!!! {e}")
-        return f"Ha {name} 😊, Groq me thoda issue hai: {e}\nAapka sawal '{text}' samajh gaya hu, fir se pucho main detail me bataunga!\n\nBy Professor Bunti Royal 👑"
-
-def make_thumb(text):
-    img = Image.new('RGB', (1280,720), color=(12,12,30))
-    d = ImageDraw.Draw(img)
-    try: f = ImageFont.truetype("DejaVuSans-Bold.ttf", 75)
-    except: f = ImageFont.load_default()
-    d.rectangle([40,180,1240,560], outline=(255,215,0), width=6)
-    d.text((640,360), text[:70], font=f, fill=(255,215,0), anchor="mm", stroke_width=4, stroke_fill=(0,0,0))
-    bio = io.BytesIO(); img.save(bio, 'PNG'); bio.seek(0); return bio
-
-app = Client("SigAlphaBot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
-
 @app.on_message(filters.command("start"))
 async def start_cmd(_, m):
     print(f"START from {m.from_user.id}")
     name = get_name(m.from_user)
-    txt = f"Hello {name}! 👋\n\nYo! SigAlpha Yaha Hai 🔥\nAapka AI best friend! Koi bhi sawal pucho!\n\n👑 Owner: Professor Bunti Royal ✨\nCivil Engineer 👷‍♂️ | Genius Developer 🧠\n\nMeri Soch: 🎯 सफलता का कोई शॉर्टकट नहीं होता।\n\nBy Professor Bunti Royal 👑"
+    txt = f"""🫡 **Jai Hind {name}! 🇮🇳** 🫡
+
+🔥 **Yo! SigAlpha Yaha Hai - Aapka AI Dost!** 🤖
+
+✨ **Main Kya Kar Sakta Hu?**
+├─ 💬 Koi bhi sawal ka jawab (Hinglish me)
+├─ 🎨 Thumbnail / Banner banana - `/thumbnail`
+├─ 🧠 Coding, Study, Life Advice sab kuch!
+
+👑 **Mere Malik:**
+**Professor Bunti Royal ✨**
+Civil Engineer 👷‍♂️ | Genius Developer 🧠 | SigAlpha Owner
+
+🎯 **Meri Soch:**
+> *सफलता का कोई शॉर्टकट नहीं होता, मेहनत ही असली पहचान है!*
+
+👇 **Neeche button dabao aur shuru karo!**
+
+**By Professor Bunti Royal 👑**
+"""
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("👑 Owner Kaun Hai?", callback_data="owner")],
         [InlineKeyboardButton("🎨 Thumbnail Banao", callback_data="thumb")]
     ])
     await m.reply_text(txt, reply_markup=kb)
-
-@app.on_message(filters.command(["thumbnail","thumb","banner"]))
-async def thumb_cmd(_, m):
-    if len(m.command) < 2:
-        return await m.reply_text("Likho: /thumbnail Pushpa 2 Review\n\nBy Professor Bunti Royal 👑")
-    bio = make_thumb(m.text.split(None,1)[1])
-    await app.send_photo(m.chat.id, bio, caption=f"✅ Thumbnail Ready!\n\nBy Professor Bunti Royal 👑")
-
-@app.on_callback_query()
-async def cb(_, q):
-    if q.data == "owner":
-        await q.message.reply_text("👑 **Mere Malik / Creator** 👑\n\n**Name: Professor Bunti Royal ✨**\n**Civil Engineer 👷‍♂️ | Genius Developer 🧠**\n\nYe ladka dil ka bahut hi acha aur sabka chaheta hai ❤️ Ek sachcha Genius hai!\n\nMeri Soch: 🎯 सफलता का कोई शॉर्टकट नहीं होता।\n\nBy Professor Bunti Royal 👑")
-    else:
-        await q.message.reply_text("🎨 /thumbnail Aapka Text\nExample: /thumbnail Python Tutorial\n\nBy Professor Bunti Royal 👑")
-
-@app.on_message(filters.private & ~filters.command(["start","thumbnail","thumb","banner"]))
-async def chat_cmd(_, m):
-    if not m.text: return
-    print(f"MSG RECEIVED: {m.text} from {m.from_user.id}")
-    low = m.text.lower()
-    if "owner kaun" in low or "malik kaun" in low or "kisne banaya" in low or low.strip() in ["owner","malik","creator"]:
-        return await m.reply_text("👑 Mera Owner / Creator sirf **Professor Bunti Royal** hai! Wahi mere Malik hain!\n\nBy Professor Bunti Royal 👑")
-    try:
-        await app.send_chat_action(m.chat.id, enums.ChatAction.TYPING)
-        name = get_name(m.from_user)
-        ans = await asyncio.to_thread(ask_groq_sync, m.text, name)
-        await m.reply_text(ans)
-    except Exception as e:
-        print(f"CHAT ERROR: {e}")
-        await m.reply_text(f"Error: {e}\n\nBy Professor Bunti Royal 👑")
-
-# Flask for Render
-web = Flask(__name__)
-@web.route('/')
-def home(): return "SigAlpha Running By Professor Bunti Royal 👑"
-threading.Thread(target=lambda: web.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000))), daemon=True).start()
-
-print("SigAlpha AI Starting... By Professor Bunti Royal 👑")
-app.run()
