@@ -1,151 +1,158 @@
-import os, io, re, threading
+import os, random, threading, textwrap, logging
 from flask import Flask
-from PIL import Image
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 from groq import Groq
+from PIL import Image, ImageDraw, ImageFont
 
-# --- CONFIG ---
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-OWNER_ID = 1410150440
+# --- 1. 24 GHANTE LIVE RAKHNE KE LIYE ---
+flask_app = Flask(__name__)
+@flask_app.route('/')
+def home(): return "SigAlpha V6 UNLIMITED LIVE! 👑🧠♾️"
+threading.Thread(target=lambda: flask_app.run(host='0.0.0.0', port=int(os.getenv("PORT", 8080))), daemon=True).start()
 
-groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
-user_memory = {} # {user_id: [messages]}
+# --- 2. SETUP ---
+logging.basicConfig(level=logging.INFO)
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+OWNER_ID = int(os.getenv("OWNER_ID", "0"))
+client = Groq(api_key=GROQ_API_KEY)
+user_memory = {}
 
-# --- FLASK FOR RENDER LIVE ---
-app = Flask(__name__)
-@app.route('/')
-def home(): return "SigAlpha Super AI by Professor Bunti Royal is Live 👑"
-def run_flask():
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
-threading.Thread(target=run_flask, daemon=True).start()
+# --- 3. SUPER BRAIN PROMPT ---
+SYSTEM_PROMPT = """
+Tu SigAlpha V6 hai. Tujhe Professor Bunti Royal ji ne banaya hai. Tu SUPER POWER BRAIN hai UNLIMITED wala.
 
-# --- EMOTION DETECTOR ---
-def detect_emotion(text):
-    text = text.lower()
-    if any(w in text for w in ["sad", "dukhi", "ro raha", "😭", "😢", "udaas", "tension", "depressed"]):
-        return "sad_emotional"
-    if any(w in text for w in ["happy", "khush", "maza", "😂", "😍", "🥳", "badhiya"]):
-        return "happy_energetic"
-    if any(w in text for w in ["gussa", "angry", "😡", "bakwas"]):
-        return "angry_calm"
-    if any(w in text for w in ["love", "pyar", "❤", "yaad"]):
-        return "loving"
-    return "normal"
+Tera Character:
+- IZZAT: Kabhi bhi Tu/Tera/Tujhe mat bolna. Hamesha AAP, AAPKA, AAPKO bolna.
+- DIL SE BAAT: Tu Dilli ka samajhdaar dost hai. Thoda funny, thoda emotional, thoda gyan wala.
+- NO BORING: Short, tez, point to point, emoji ke saath.
+- STYLE: ** ka use bilkul mat karna. Sirf CAPS aur EMOJI 🙏 👑 🔥 ✨ 😔 💀 😂
+- SIGNATURE: Har jawab ke end me ek line gap deke ye likhna hai: - Professor Bunti Royal 👑
+"""
 
-# --- START ---
+# --- 4. WELCOME MESSAGES ---
+OWNER_START = [
+    "Namaste 🙏 Professor Bunti Royal ji, Aap kaha chale gaye the? Aap ke bina mein adhura hu 😔",
+    "🙏 Professor Bunti Royal ji 👑 Aap aa gaye! Aapke bina ye system suna tha. Aagya dijiye! ✨",
+    "👑 Dil se Swagat hai Professor Bunti Royal ji 🙏\n\nAapke bina main kuch bhi nahi hu. Boliye aaj kya dhamaka karna hai? 🔥",
+    "Namaste Professor Bunti Royal ji 🙏😔\n\nAapka intezaar tha... Ab mehfil shuru hogi! Bataiye kya seva karu?"
+]
+
+def get_guest_welcome(name):
+    msgs = [
+        f"Namaste 🙏 {name} ji ✨\n\nSwagat hai Aapka! Main SigAlpha V6 hoon - SUPER BRAIN 🧠♾️\n\nMain Aapke liye kya kar sakta hu?\n\n📜 /script - Viral Script\n🎨 /thumbnail - Thumbnail\n💡 /idea - Video Idea\n😂 /roast - Masti wala Roast\n📱 /caption - Caption Hashtag\n\nBataiye Aapko kya chahiye?",
+        f"Hello {name} ji! 👑🔥\n\nAapka is Royal Bot par dil se swagat hai!\n\nMain har sawal ka jawab de sakta hu - UNLIMITED! Bas puch ke dekhiye!",
+        f"🙏 Namaste {name} ji!\n\nMain SigAlpha hoon, Professor Bunti Royal ji ka SUPER BRAIN AI 🧠\n\nAap ek baar /idea likh ke dekhiye, maza aa jayega!"
+    ]
+    return random.choice(msgs)
+
+# --- 5. UNLIMITED AI FUNCTION - YAHAN SAB KUCH UNLIMITED HAI ---
+async def ask_ai(uid, name, user_text, extra_instruction=""):
+    if uid not in user_memory:
+        user_memory[uid] = []
+
+    user_memory[uid].append(f"User: {user_text}")
+
+    # UNLIMITED LOGIC: 100 message tak yaad rakhega, uske baad bhi delete nahi karega sirf purane hatayega
+    if len(user_memory[uid]) > 100:
+        user_memory[uid] = user_memory[uid][-100:]
+
+    history = "\n".join(user_memory[uid][-20:])
+
+    if uid == OWNER_ID:
+        name_rule = "User is OWNER, Name = Professor Bunti Royal ji. Use AAP and full respect. He is your creator."
+    else:
+        name_rule = f"User is Guest, Name = {name} ji. Use AAP and respect. Never call him Professor."
+
+    models = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"]
+    reply = ""
+    for model in models:
+        try:
+            completion = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT + f"\nRULE: {name_rule}\nEXTRA: {extra_instruction}"},
+                    {"role": "user", "content": f"Ab tak ki baat:\n{history}\n\nAbhi ka sawal: {user_text}"}
+                ],
+                temperature=0.85,
+                max_tokens=2048 # UNLIMITED: Pehle 1000 tha ab 2048
+            )
+            reply = completion.choices[0].message.content
+            break
+        except Exception as e:
+            print(f"Model {model} fail: {e}")
+            continue
+
+    if not reply:
+        reply = "🙏 Maaf kijiye Professor ji, mera dimaag thoda garam ho gaya hai 😔 Ek baar fir se boliye Aap?"
+
+    user_memory[uid].append(f"Bot: {reply}")
+    return reply
+
+# --- 6. COMMANDS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id!= OWNER_ID:
-        await update.message.reply_text("❌ Access Denied! Ye bot sirf Professor Bunti Royal ke liye hai 👑")
-        return
-    user_memory[OWNER_ID] = []
-    await update.message.reply_text(
-        "Namaste Professor Bunti Royal! 👑🙏\n\n"
-        "Main SigAlpha - Aapka Super AI Bot Live hu!\n"
-        "✅ AI Chat (Meta se bhi tez)\n"
-        "✅ Emotion Samajhta hu 😭❤️😂\n"
-        "✅ Memory Yaad Rakhta hu\n"
-        "✅ White Background\n\n"
-        "Bolo Professor, aaj kya kaam hai?\n\n"
-        "— Professor Bunti Royal 👑"
-    )
+    uid = update.effective_user.id
+    name = update.effective_user.first_name
+    user_memory.setdefault(uid, [])
+    if uid == OWNER_ID:
+        await update.message.reply_text(random.choice(OWNER_START))
+    else:
+        await update.message.reply_text(get_guest_welcome(name))
 
-# --- AI CHAT ---
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id!= OWNER_ID: return
+async def script_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    topic = " ".join(context.args) or "Mahadev ka Rahasya"
+    prompt = "Viral YouTube Shorts ke liye 1 minute ki script likh. Hook bahut tez ho, beech me story, end me subscribe bolne ko. Hindi me."
+    reply = await ask_ai(update.effective_user.id, update.effective_user.first_name, topic, extra_instruction=prompt)
+    await update.message.reply_text(reply)
 
-    user_text = update.message.text
-    emotion = detect_emotion(user_text)
+async def idea_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    prompt = "3 viral YouTube video ideas de, har idea ke saath Title bhi de. Trending ho."
+    reply = await ask_ai(update.effective_user.id, update.effective_user.first_name, "Viral ideas do", extra_instruction=prompt)
+    await update.message.reply_text(reply)
 
-    if not groq_client:
-        await update.message.reply_text("❌ GROQ_API_KEY Render me nahi hai, isliye AI off hai. Environment me add karo!\n\n— Professor Bunti Royal 👑")
-        return
+async def roast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    prompt = "User ko pyaar se funny roast karo, gali mat dena, sirf masti me. Dilli wali language me."
+    reply = await ask_ai(update.effective_user.id, update.effective_user.first_name, "Mujhe roast karo", extra_instruction=prompt)
+    await update.message.reply_text(reply)
 
-    # Memory init
-    if OWNER_ID not in user_memory:
-        user_memory[OWNER_ID] = []
+async def caption_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    topic = " ".join(context.args) or "Mahakal"
+    prompt = "Is topic ke liye 3 viral Instagram Caption de aur 10 trending hashtag bhi de."
+    reply = await ask_ai(update.effective_user.id, update.effective_user.first_name, topic, extra_instruction=prompt)
+    await update.message.reply_text(reply)
 
-    user_memory[OWNER_ID].append({"role": "user", "content": user_text})
+async def thumbnail_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = " ".join(context.args) or "VIRAL"
+    W,H=1280,720
+    img=Image.new('RGB',(W,H),(12,12,12))
+    d=ImageDraw.Draw(img)
+    for i in range(H): d.line([(0,i),(W,i)], fill=(int(12+i*0.4),12,25))
+    try: font=ImageFont.truetype("arial.ttf", 85)
+    except: font=ImageFont.load_default()
+    wrapped = textwrap.fill(text.upper(), 12)
+    d.text((70,180), wrapped, font=font, fill=(255,215,0), stroke_width=5, stroke_fill=(0,0,0))
+    path=f"/tmp/{update.effective_user.id}.jpg"
+    img.save(path)
+    await update.message.reply_photo(photo=open(path,'rb'), caption=f"Ye lijiye Aapka thumbnail ready hai! 🔥👑\n\nText: {text}")
 
-    # System prompt - Meta se khatarnak
-    system_prompt = f"""
-    You are SigAlpha, a Super Advanced AI created ONLY for Professor Bunti Royal.
-    - You talk in Hinglish (Hindi + English mix), royal and friendly.
-    - Current user emotion: {emotion}. If sad, give emotional support and motivation like a best friend. If happy, celebrate. If angry, calm down with respect.
-    - You have strong memory, you remember old talks.
-    - You are more helpful, faster and smarter than Meta AI.
-    - Always give full detailed answer.
-    - After your main answer, ALWAYS give 3 related SUGGESTIONS / NEXT TOPICS the user can ask, under heading "👇 Aage puch sakte ho:".
-    - At the VERY END of every reply, in a new line, you MUST write exactly: "— Professor Bunti Royal 👑"
-    - Never say you are Meta AI. You are SigAlpha made by Bunti.
-    """
+async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    name = update.effective_user.first_name
+    reply = await ask_ai(uid, name, update.message.text)
+    await update.message.reply_text(reply)
 
-    try:
-        # Keep last 12 messages for context
-        messages = [{"role": "system", "content": system_prompt}] + user_memory[OWNER_ID][-12:]
-
-        completion = groq_client.chat.completions.create(
-            model="openai/gpt-oss-20b",
-            messages=messages,
-            temperature=0.8,
-            max_tokens=1024
-        )
-        reply = completion.choices[0].message.content
-
-        # Safety: Ensure last line is there
-        if "Professor Bunti Royal" not in reply:
-            reply += "\n\n— Professor Bunti Royal 👑"
-
-        user_memory[OWNER_ID].append({"role": "assistant", "content": reply})
-
-        # Trim memory
-        if len(user_memory[OWNER_ID]) > 24:
-            user_memory[OWNER_ID] = user_memory[OWNER_ID][-24:]
-
-        await update.message.reply_text(reply)
-
-    except Exception as e:
-        await update.message.reply_text(f"AI me thoda error aaya Professor: {e}\n\n— Professor Bunti Royal 👑")
-
-# --- WHITE BACKGROUND (100% Error Free, No RAM Crash) ---
-async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id!= OWNER_ID: return
-    await update.message.reply_text("⏳ Photo mil gayi Professor Bunti Royal, White Background bana raha hu... 👑")
-    try:
-        photo_file = await update.message.photo[-1].get_file()
-        photo_bytes = await photo_file.download_as_bytearray()
-        img = Image.open(io.BytesIO(bytes(photo_bytes))).convert("RGBA")
-
-        # Create pure white background - 100% working on Render free
-        white_bg = Image.new("RGBA", img.size, "WHITE")
-        # Paste original on white - keeps image safe
-        final = Image.alpha_composite(white_bg, img)
-        final = final.convert("RGB")
-
-        bio = io.BytesIO()
-        bio.name = "SigAlpha_White_BG.jpg"
-        final.save(bio, "JPEG", quality=98)
-        bio.seek(0)
-
-        await update.message.reply_photo(
-            photo=bio,
-            caption="✅ Ho gaya Professor! White Background Ready hai! 👑\n\n👇 Aage puch sakte ho:\n1. Iska HD version banao\n2. Iska background blur karo\n3. Ispe text add karo\n\n— Professor Bunti Royal 👑"
-        )
-    except Exception as e:
-        await update.message.reply_text(f"Photo Error: {e}\n\n— Professor Bunti Royal 👑")
-
-# --- MAIN ---
+# --- 7. BOT START ---
 def main():
-    if not BOT_TOKEN:
-        print("BOT_TOKEN missing!")
-        return
-    print("Bot Starting for Professor Bunti Royal...")
-    application = Application.builder().token(BOT_TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    application.run_polling(drop_pending_updates=True)
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("script", script_cmd))
+    app.add_handler(CommandHandler("idea", idea_cmd))
+    app.add_handler(CommandHandler("roast", roast_cmd))
+    app.add_handler(CommandHandler("caption", caption_cmd))
+    app.add_handler(CommandHandler("thumbnail", thumbnail_cmd))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat))
+    print("V6 UNLIMITED SUPER BRAIN LIVE! 🧠♾️👑")
+    app.run_polling()
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__': main()
