@@ -11,7 +11,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 OWNER_ID = 7443912515 # Aapki ID
 
-app = Client("SigAlpha", bot_token=BOT_TOKEN, api_id=12345, api_hash="hash")
+app = Client("SigAlpha", bot_token=BOT_TOKEN, api_id=int(os.getenv("API_ID", "31716213")), api_hash=os.getenv("API_HASH", "a274ab2a307ac4b9ca0a143262f65e99"))
 flask_app = Flask(__name__)
 groq_client = Groq(api_key=GROQ_API_KEY)
 
