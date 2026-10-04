@@ -1,44 +1,62 @@
-import os, threading
-from flask import Flask
-from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes, CommandHandler
-from collections import defaultdict, deque
-from openai import OpenAI
+import os
+import random
+import json
+import asyncio
+from datetime import datetime
+from pyrogram import Client, filters
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
+import google.generativeai as genai
+from groq import Groq
+from PIL import Image, ImageDraw, ImageFont
+import io
 
-flask_app = Flask(__name__)
-@flask_app.route('/')
-def home(): return "SigAlpha MEGA GROK BOT LIVE 👑"
-def run_flask(): flask_app.run(host='0.0.0.0', port=int(os.getenv("PORT", 8080)))
-threading.Thread(target=run_flask, daemon=True).start()
+# --- CONFIG ---
+API_ID = int(os.getenv("API_ID"))
+API_HASH = os.getenv("API_HASH")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_API_KEY2 = os.getenv("GEMINI_API_KEY2")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+OWNER_ID = int(os.getenv("OWNER_ID", "0"))
 
-BOT_TOKEN = os.getenv("BOT_TOKEN","").strip()
-OR_KEY = os.getenv("GROQ_API_KEY","").strip()
-client = OpenAI(api_key=OR_KEY, base_url="https://openrouter.ai/api/v1")
-memory = defaultdict(lambda: deque(maxlen=15))
+# Gemini Setup
+genai.configure(api_key=GEMINI_API_KEY)
+gemini_model = genai.GenerativeModel('gemini-1.5-flash')
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(f"Namaste {update.effective_user.first_name}! 👑\nMain hu SigAlpha MEGA BOT - Grok Free wala!\nBolo kya chahiye?")
+# Groq Setup
+groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
-async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
-    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-    try:
-        msgs = [{"role":"system","content":f"You are SigAlpha MEGA BOT created by Professor Bunti Royal. You are super intelligent like Grok, witty, savage, helpful. You know everything. Speak in Hindi Hinglish mix. User: {update.effective_user.first_name}"}]
-        for u,b in list(memory[uid]):
-            msgs.append({"role":"user","content":u})
-            msgs.append({"role":"assistant","content":b})
-        msgs.append({"role":"user","content":update.message.text})
-        r = client.chat.completions.create(model="x-ai/grok-3-mini:free", messages=msgs, max_tokens=1000)
-        ans = r.choices[0].message.content
-        memory[uid].append((update.message.text, ans))
-        await update.message.reply_text(ans)
-    except Exception as e:
-        await update.message.reply_text(f"Thoda wait karo Professor ji, overload hai: {e}")
+# Memory - Super Brain
+USER_MEMORY = {}
+CHAT_HISTORY = {}
 
-def main():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat))
-    print("MEGA BOT STARTED")
-    app.run_polling()
-if __name__ == '__main__': main()
+# Random Start Messages - Har baar change hoga
+START_MESSAGES = [
+    "Hey! Main hoon SigAlpha AI 🚀\nAapka Super Intelligent Dost!\n\nKuch bhi pucho, koi bhi thumbnail/banner banao - main ready hu!\n\nBy Professor Bunti Royal 👑",
+    "Namaste! ✨ SigAlpha AI is Live!\n\nMain har sawal ka jawab de sakta hu, code likh sakta hu, thumbnail bana sakta hu!\n\nBolo kya help chahiye?\n\nBy Professor Bunti Royal 👑",
+    "Yo! SigAlpha Yaha Hai 🔥\n\nBore hone ka tension hi nahi! Chatting, Gyan, Masti sab hoga!\n\nBy Professor Bunti Royal 👑",
+    "Welcome to Future! 🤖\nMain SigAlpha AI - Aapka Personal AI Assistant\n\nMemory: ON 🧠 | Speed: Unlimited ⚡\n\nBy Professor Bunti Royal 👑"
+]
+
+OWNER_REPLIES = [
+    "Ji Professor Bunti Royal Ji 👑 Hukum Kariye!",
+    "Mere Malik Professor Bunti Royal aa gaye! 🙏 Bataiye kya kaam hai?",
+]
+
+# App
+app = Client("SigAlphaBot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+
+def is_owner(user_id):
+    return user_id == OWNER_ID
+
+def get_user_name(user):
+    if is_owner(user.id):
+        return "Professor Bunti Royal 👑"
+    return user.first_name or "Dost"
+
+def get_memory(user_id):
+    return USER_MEMORY.get(user_id, {})
+
+async def ask_ai(prompt, user_id, user_name):
+    memory = get_memory(user_id)
+    history = CHAT_HISTORY.get(user_id, [])
