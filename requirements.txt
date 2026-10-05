@@ -1,5 +1,6 @@
 pyrogram
 tgcrypto
-Flask
-Pillow
+python-dotenv
+google-generativeai
 groq
+Pillow
