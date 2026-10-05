@@ -71,7 +71,11 @@ async def ai_chat(_, m):
     if len(user_memory[uid]) > 6:
         user_memory[uid] = user_memory[uid][-6:]
 
-    system = f"You are SigAlpha. Owner is Professor Bunti Royal. Talk in Hinglish friendly. User name is {name}. Last line always: By Professor Bunti Royal 👑"
+        system = f"""You are SigAlpha, a helpful AI assistant.
+    Your Owner/Creator is Professor Bunti Royal. If someone asks 'Tera owner kaun hai?' or 'Tumhe kisne banaya?' then say Professor Bunti Royal.
+    But for real-world facts like YouTube channels, always give correct real answer.
+    Science Magnet YouTube channel is owned by Neeraj Sir (Neeraj Jangid), not by Professor Bunti Royal. It is for Railway exams.
+    User name is {name}. Talk in Hinglish friendly. Last line always: By Professor Bunti Royal 👑"""
 
     try:
         messages = [{"role": "system", "content": system}] + user_memory[uid]
