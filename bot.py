@@ -1,4 +1,4 @@
-import os, requests, random, re
+import os, requests, random, re, base64
 from flask import Flask, request
 from groq import Groq
 from collections import defaultdict
@@ -11,62 +11,70 @@ app = Flask(__name__)
 memory = defaultdict(list)
 
 OWNER_WELCOMES = [
-    "Namaste Professor Bunti Royal Ji! 👑\nSigAlpha Taiyaar Hai! Hukum Dijiye!",
-    "Welcome Back Professor Sahab! 🔥\nAapka SigAlpha Full Power ON Hai!",
-    "Jai Ho Professor Bunti Royal Ji Ki! 🚀\nBolo Kya Kaam Hai Aaj?"
+    "Namaste Professor Bunti Royal Ji! 👑✨\nSigAlpha Full Power ON Hai! 🔥\nHukum Dijiye! 🚀",
+    "Welcome Back Professor Sahab! 🙏💎\nAapka SigAlpha Taiyaar Hai! 👑",
+    "Jai Ho Professor Bunti Royal Ji Ki! 🚀🔥\nBolo Kya Kaam Hai Aaj? 😊"
 ]
 USER_WELCOMES = [
-    "Namaste {name} Ji! 🙏\nMain SigAlpha AI hu - Aapki madad ke liye ready hu!",
-    "Hello {name}! ✨\nSigAlpha me aapka swagat hai! Puchhiye kuch bhi!",
-    "Hey {name}! 🚀\nMain SigAlpha hu - Aapka Personal AI Assistant!"
+    "Namaste {name} Ji! 🙏✨\nMain SigAlpha AI hu 🤖\nAapki madad ke liye ready hu! 🚀",
+    "Hello {name}! 😊💫\nSigAlpha me aapka swagat hai! 🎉\nPuchhiye kuch bhi! 👇",
 ]
 
 def send_msg(chat_id, text):
     try:
-        # Fancy font ko normal kar do
-        text = text.replace("𝗕","B").replace("𝗨","U").replace("𝗡","N").replace("𝗧","T").replace("𝗜","I").replace("𝗥","R").replace("𝗢","O").replace("𝗬","Y").replace("𝗔","A").replace("𝗟","L")
         requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": text}, timeout=20)
-    except Exception as e:
-        print(e)
+    except: pass
 
-def get_file_url(file_id):
+def get_image_base64(file_id):
     try:
         r = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getFile?file_id={file_id}", timeout=10).json()
         path = r["result"]["file_path"]
-        return f"https://api.telegram.org/file/bot{BOT_TOKEN}/{path}"
-    except: return None
+        file_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{path}"
+        img_data = requests.get(file_url, timeout=15).content
+        b64 = base64.b64encode(img_data).decode('utf-8')
+        return f"data:image/jpeg;base64,{b64}"
+    except Exception as e:
+        print(f"Image download fail: {e}")
+        return None
 
 def clean_think(text):
-    # Qwen reasoning model ka <think> hatana
     return re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL).strip()
 
-def get_reply(chat_id, name, user_text, is_owner, image_url=None):
-    system = "You are SigAlpha AI. Owner is Professor Bunti Royal Ji. Talk to "+name+". Reply in normal simple Hinglish/English, NO fancy unicode box font, only normal letters. Be helpful, superfast. Always end with 'By Professor Bunti Royal Ji'"
+def get_reply(chat_id, name, user_text, is_owner, image_b64=None):
+    # Emoji wala system prompt
+    system = f"""You are SigAlpha AI 🤖. Owner is Professor Bunti Royal Ji 👑.
+    Talking to {name}.
+    IMPORTANT RULES:
+    1. Use normal letters only, NO fancy box font
+    2. Always use lots of emojis 🎉🚀✨👑💡🔥😊 to make answer beautiful
+    3. Use Hinglish, easy language
+    4. If photo has maths puzzle, solve step by step with emoji
+    5. Always end with 'By Professor Bunti Royal Ji 👑'
+    """
 
-    if image_url:
-        try:
-            print(f"Trying vision with: {image_url}")
-            comp = groq_client.chat.completions.create(
-                model="qwen/qwen3-32b", # NEW VISION MODEL
-                messages=[
-                    {"role": "system", "content": system + " You can see images. Explain photo in detail, solve if question in photo with steps."},
-                    {"role": "user", "content": [
-                        {"type": "text", "text": user_text or "Is photo ko detail me samjhao aur agar isme sawal hai to pura solution do"},
-                        {"type": "image_url", "image_url": {"url": image_url}}
-                    ]}
-                ],
-                max_tokens=2000
-            )
-            ans = clean_think(comp.choices[0].message.content)
-            memory[chat_id].append({"role": "user", "content": f"[Photo: {user_text}]"})
-            memory[chat_id].append({"role": "assistant", "content": ans})
-            if "By Professor Bunti Royal Ji" not in ans: ans += "\n\nBy Professor Bunti Royal Ji"
-            return ans
-        except Exception as e:
-            print(f"Vision failed: {e}")
-            return f"Photo ka analysis fail hua: {e}\nPhir se photo bhejo clear wali.\n\nBy Professor Bunti Royal Ji"
+    if image_b64:
+        for model_name in ["qwen/qwen3.6-27b", "qwen/qwen3.8-27b"]:
+            try:
+                print(f"Trying vision: {model_name}")
+                comp = groq_client.chat.completions.create(
+                    model=model_name,
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": [
+                            {"type": "text", "text": (user_text or "Is photo me jo sawal hai uska pura solution emoji ke sath do") + " Use emojis and steps"},
+                            {"type": "image_url", "image_url": {"url": image_b64}}
+                        ]}
+                    ],
+                    max_tokens=2500
+                )
+                ans = clean_think(comp.choices[0].message.content)
+                if "By Professor Bunti Royal Ji" not in ans: ans += "\n\nBy Professor Bunti Royal Ji 👑"
+                return ans
+            except Exception as e:
+                print(f"{model_name} fail: {e}")
+                continue
+        return "😅 Photo ka model thoda busy hai! Aap text me sawal likh do, main emoji ke sath mast jawab dunga! 🎉\n\nBy Professor Bunti Royal Ji 👑"
 
-    # TEXT CHAT
     memory[chat_id].append({"role": "user", "content": user_text})
     history = memory[chat_id][-10:]
     msgs = [{"role": "system", "content": system}] + history
@@ -75,14 +83,13 @@ def get_reply(chat_id, name, user_text, is_owner, image_url=None):
         c = groq_client.chat.completions.create(model="openai/gpt-oss-20b", messages=msgs)
         ans = c.choices[0].message.content
         memory[chat_id].append({"role": "assistant", "content": ans})
-        if "By Professor Bunti Royal Ji" not in ans: ans += "\n\nBy Professor Bunti Royal Ji"
+        if "By Professor Bunti Royal Ji" not in ans: ans += "\n\nBy Professor Bunti Royal Ji 👑"
         return ans
     except Exception as e:
-        print(f"Text Error: {e}")
-        return f"Error: {e}\n\nBy Professor Bunti Royal Ji"
+        return f"⚠️ Error: {e}\n\nBy Professor Bunti Royal Ji 👑"
 
 @app.route('/')
-def home(): return "SigAlpha Final Live"
+def home(): return "SigAlpha Emoji Live 🎉"
 
 @app.route(f'/{BOT_TOKEN}', methods=['POST'])
 def webhook():
@@ -96,10 +103,10 @@ def webhook():
 
         if "photo" in msg:
             file_id = msg["photo"][-1]["file_id"]
-            caption = msg.get("caption", "")
-            img_url = get_file_url(file_id)
-            send_msg(chat_id, f"Photo mil gayi {name} ji, analyse kar raha hu... 🔍")
-            reply = get_reply(chat_id, name, caption, is_owner, img_url)
+            caption = msg.get("caption","")
+            send_msg(chat_id, f"📸 Photo mil gayi {name} ji! 🔍 Analyse kar raha hu... ✨")
+            b64 = get_image_base64(file_id)
+            reply = get_reply(chat_id, name, caption, is_owner, b64)
             send_msg(chat_id, reply)
             return "ok"
 
@@ -108,14 +115,11 @@ def webhook():
             if text == "/start":
                 memory[chat_id].clear()
                 welcome = random.choice(OWNER_WELCOMES) if is_owner else random.choice(USER_WELCOMES).format(name=name)
-                send_msg(chat_id, welcome + "\n\nBy Professor Bunti Royal Ji")
-            elif text == "/clear":
-                memory[chat_id].clear()
-                send_msg(chat_id, "Clear ho gaya ji! ✅\n\nBy Professor Bunti Royal Ji")
+                send_msg(chat_id, welcome + "\n\nBy Professor Bunti Royal Ji 👑")
             else:
                 send_msg(chat_id, get_reply(chat_id, name, text, is_owner))
     except Exception as e:
-        print(f"Webhook Error: {e}")
+        print(e)
     return "ok"
 
 if __name__ == "__main__":
