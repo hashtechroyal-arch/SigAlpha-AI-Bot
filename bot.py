@@ -20,7 +20,7 @@ def get_reply(name, text, is_owner):
     except Exception as e:
         # Groq ka NAYA model - purana wala band ho gaya hai
         c = groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model="llama-3.3-70b-versatile"
             messages=[{"role":"user","content":prompt}]
         )
         ans = c.choices[0].message.content
