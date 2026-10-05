@@ -13,13 +13,18 @@ app = Flask(__name__)
 
 def get_reply(name, text, is_owner):
     who = "Professor Bunti Royal Ji" if is_owner else name
-    prompt = f"Tum SigAlpha AI ho. Owner Professor Bunti Royal Ji hai. Har jawab ke end me 'By Professor Bunti Royal Ji' likho. {who}: {text}"
+    prompt = f"Tum SigAlpha AI ho. Owner Professor Bunti Royal Ji hai. Har jawab ke end me 'By Professor Bunti Royal Ji' likhna hai. {who}: {text}"
     try:
         res = gemini_client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
         ans = res.text
-    except:
-        c = groq_client.chat.completions.create(model="llama3-8b-8192", messages=[{"role":"user","content":prompt}])
+    except Exception as e:
+        # Groq ka NAYA model - purana wala band ho gaya hai
+        c = groq_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role":"user","content":prompt}]
+        )
         ans = c.choices[0].message.content
+
     if "By Professor Bunti Royal Ji" not in ans:
         ans += "\n\nBy Professor Bunti Royal Ji"
     return ans
@@ -40,7 +45,7 @@ def webhook():
         name = data["message"]["from"].get("first_name","User")
         is_owner = data["message"]["from"]["id"] == OWNER_ID
         if text == "/start":
-            send_msg(chat_id, f"Namaste {name}! SigAlpha ON hai 🔥\n\nBy Professor Bunti Royal Ji")
+            send_msg(chat_id, f"Namaste {name}! SigAlpha ON hai! 🔥\n\nBy Professor Bunti Royal Ji")
         else:
             reply = get_reply(name, text, is_owner)
             send_msg(chat_id, reply)
