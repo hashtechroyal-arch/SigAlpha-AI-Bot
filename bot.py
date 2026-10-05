@@ -1,25 +1,22 @@
-import os, random, sqlite3
-from pyrogram import Client, filters
+import os, requests
+from flask import Flask, request
 from google import genai
 from groq import Groq
-from PIL import Image, ImageDraw
 
-API_ID = int(os.getenv("API_ID"))
-API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OWNER_ID = int(os.getenv("OWNER_ID", "0"))
+GEMINI_KEY = os.getenv("GEMINI_API_KEY")
+GROQ_KEY = os.getenv("GROQ_API_KEY")
 
-# Naya Gemini Client
-gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+gemini_client = genai.Client(api_key=GEMINI_KEY)
+groq_client = Groq(api_key=GROQ_KEY)
 
-START_MSGS = ["Professor Ji! SigAlpha Hazir hai! 🔥", "Super Brain ON hai Professor! 🧠"]
+app = Flask(__name__)
 
-def get_reply(uid, name, text, is_owner):
+def get_reply(name, text, is_owner):
     who = "Professor Bunti Royal Ji" if is_owner else name
-    prompt = f"Tum SigAlpha AI ho. Owner sirf Professor Bunti Royal Ji hai. Sirf unko Professor bulao. Har jawab ke end me 'By Professor Bunti Royal Ji' likhna hai. User {who} bola: {text}"
+    prompt = f"Tum SigAlpha AI ho. Owner Professor Bunti Royal Ji hai. Har jawab ke end me 'By Professor Bunti Royal Ji' likho. {who}: {text}"
     try:
-        # Naya tareeka
         res = gemini_client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
         ans = res.text
     except:
@@ -27,27 +24,46 @@ def get_reply(uid, name, text, is_owner):
             c = groq_client.chat.completions.create(model="llama3-8b-8192", messages=[{"role":"user","content":prompt}])
             ans = c.choices[0].message.content
         except Exception as e:
-            ans = f"Thoda issue hai: {e}"
+            ans = f"Error: {e}"
     if "By Professor Bunti Royal Ji" not in ans:
         ans += "\n\nBy Professor Bunti Royal Ji"
     return ans
 
-app = Client("SigAlpha-AI-Bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+def send_message(chat_id, text):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    requests.post(url, json={"chat_id": chat_id, "text": text})
 
-@app.on_message(filters.command("start"))
-async def start_cmd(client, message):
-    await message.reply(f"{random.choice(START_MSGS)}\n\nBy Professor Bunti Royal Ji")
+@app.route('/')
+def home():
+    return "SigAlpha AI Live! By Professor Bunti Royal Ji"
 
-@app.on_message(filters.text)
-async def chat(client, message):
-    uid = message.from_user.id
-    name = message.from_user.first_name
-    is_owner = uid == OWNER_ID
-    if ("owner" in message.text.lower() or "malik" in message.text.lower()) and not is_owner:
-        await message.reply(f"Owner sirf Professor Bunti Royal Ji hai! Aap {name} ho.\n\nBy Professor Bunti Royal Ji")
-        return
-    reply = get_reply(uid, name, message.text, is_owner)
-    await message.reply(reply)
+@app.route(f'/{BOT_TOKEN}', methods=['POST'])
+def webhook():
+    data = request.get_json()
+    if "message" in data and "text" in data["message"]:
+        chat_id = data["message"]["chat"]["id"]
+        text = data["message"]["text"]
+        user_id = data["message"]["from"]["id"]
+        name = data["message"]["from"].get("first_name","User")
+        is_owner = user_id == OWNER_ID
 
-print("SigAlpha Super Brain ON hai... 🧠")
-app.run()
+        if text == "/start":
+            send_message(chat_id, f"Namaste {name}! SigAlpha ON hai! 🔥\n\nBy Professor Bunti Royal Ji")
+        else:
+            if ("owner" in text.lower() or "malik" in text.lower()) and not is_owner:
+                send_message(chat_id, f"Owner sirf Professor Bunti Royal Ji hai! Aap {name} ho.\n\nBy Professor Bunti Royal Ji")
+            else:
+                reply = get_reply(name, text, is_owner)
+                send_message(chat_id, reply)
+    return "ok"
+
+if __name__ == "__main__":
+    # Webhook set karo
+    render_url = os.getenv("RENDER_EXTERNAL_URL") # Render ye khud deta hai
+    if render_url:
+        webhook_url = f"{render_url}/{BOT_TOKEN}"
+        requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={webhook_url}")
+        print(f"Webhook set to {webhook_url}")
+
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
