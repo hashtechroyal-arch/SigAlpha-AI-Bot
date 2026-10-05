@@ -3,7 +3,6 @@ import asyncio
 from groq import Groq
 from pyrogram import Client, filters, enums
 
-# --- CONFIG ---
 API_ID = int(os.getenv("API_ID", "12345"))
 API_HASH = os.getenv("API_HASH", "your_api_hash")
 BOT_TOKEN = os.getenv("BOT_TOKEN", "your_bot_token")
@@ -25,8 +24,11 @@ async def start_cmd(_, m):
 async def thumb_cmd(_, m):
     await m.reply_text("Thumbnail feature abhi band hai.\n\nBy Professor Bunti Royal 👑")
 
-@app.on_message(filters.text & ~filters.command(["start","thumbnail"]))
+@app.on_message(filters.text & ~filters.command(["start","thumbnail"]) & ~filters.me)
 async def ai_chat(_, m):
+    if not m.from_user or m.from_user.is_bot:
+        return
+
     await app.send_chat_action(m.chat.id, enums.ChatAction.TYPING)
     uid = m.from_user.id
     name = get_name(m.from_user)
