@@ -1,5 +1,3 @@
-flask
-google-genai
-groq
+Flask
 requests
-python-dotenv
+groq
