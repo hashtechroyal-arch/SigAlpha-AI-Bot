@@ -1,4 +1,4 @@
-import os, requests, random
+import os, requests, random, re
 from flask import Flask, request
 from groq import Groq
 from collections import defaultdict
@@ -10,74 +10,76 @@ groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 app = Flask(__name__)
 memory = defaultdict(list)
 
-# /start ke liye gajab welcome - har baar change
 OWNER_WELCOMES = [
-    "Namaste Professor Bunti Royal Ji! 👑\n\nSigAlpha Taiyaar Hai! Hukum Dijiye!",
-    "Welcome Back Professor Sahab! 🔥\n\nAapka SigAlpha Full Power ON Hai!",
-    "Jai Ho Professor Bunti Royal Ji Ki! 🚀\n\nBolo Kya Kaam Hai Aaj?",
-    "Professor Ji Aa Gaye! 👑💎\n\nSigAlpha Aapki Seva Me Hazir Hai!"
+    "Namaste Professor Bunti Royal Ji! 👑\nSigAlpha Taiyaar Hai! Hukum Dijiye!",
+    "Welcome Back Professor Sahab! 🔥\nAapka SigAlpha Full Power ON Hai!",
+    "Jai Ho Professor Bunti Royal Ji Ki! 🚀\nBolo Kya Kaam Hai Aaj?"
 ]
-
 USER_WELCOMES = [
-    "Namaste {name} Ji! 🙏\n\nMain SigAlpha AI hu - Aapki madad ke liye ready hu!",
-    "Hello {name}! ✨\n\nSigAlpha me aapka swagat hai! Puchhiye kuch bhi!",
-    "Hey {name}! 🚀\n\nMain SigAlpha hu - Aapka Personal AI Assistant!",
-    "Welcome {name} Ji! 💫\n\nSigAlpha ON hai, Bolo kya help chahiye?"
+    "Namaste {name} Ji! 🙏\nMain SigAlpha AI hu - Aapki madad ke liye ready hu!",
+    "Hello {name}! ✨\nSigAlpha me aapka swagat hai! Puchhiye kuch bhi!",
+    "Hey {name}! 🚀\nMain SigAlpha hu - Aapka Personal AI Assistant!"
 ]
 
 def send_msg(chat_id, text):
     try:
-        requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": text}, timeout=15)
-    except: pass
+        # Fancy font ko normal kar do
+        text = text.replace("𝗕","B").replace("𝗨","U").replace("𝗡","N").replace("𝗧","T").replace("𝗜","I").replace("𝗥","R").replace("𝗢","O").replace("𝗬","Y").replace("𝗔","A").replace("𝗟","L")
+        requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": chat_id, "text": text}, timeout=20)
+    except Exception as e:
+        print(e)
 
 def get_file_url(file_id):
     try:
-        r = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getFile?file_id={file_id}").json()
+        r = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getFile?file_id={file_id}", timeout=10).json()
         path = r["result"]["file_path"]
         return f"https://api.telegram.org/file/bot{BOT_TOKEN}/{path}"
     except: return None
 
+def clean_think(text):
+    # Qwen reasoning model ka <think> hatana
+    return re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL).strip()
+
 def get_reply(chat_id, name, user_text, is_owner, image_url=None):
+    system = "You are SigAlpha AI. Owner is Professor Bunti Royal Ji. Talk to "+name+". Reply in normal simple Hinglish/English, NO fancy unicode box font, only normal letters. Be helpful, superfast. Always end with 'By Professor Bunti Royal Ji'"
+
     if image_url:
-        # PHOTO WALA BRAIN - Vision Model
         try:
+            print(f"Trying vision with: {image_url}")
             comp = groq_client.chat.completions.create(
-                model="meta-llama/llama-4-scout-17b-16e-instruct",
+                model="qwen/qwen3-32b", # NEW VISION MODEL
                 messages=[
-                    {"role": "system", "content": f"You are SigAlpha AI. Owner is Professor Bunti Royal Ji. Talking to {name}. Explain photo in detail, solve question in photo in Hinglish with steps. End with 'By Professor Bunti Royal Ji'"},
+                    {"role": "system", "content": system + " You can see images. Explain photo in detail, solve if question in photo with steps."},
                     {"role": "user", "content": [
-                        {"type": "text", "text": user_text or "Is photo ko detail me samjhao aur iska solution do"},
+                        {"type": "text", "text": user_text or "Is photo ko detail me samjhao aur agar isme sawal hai to pura solution do"},
                         {"type": "image_url", "image_url": {"url": image_url}}
                     ]}
-                ]
+                ],
+                max_tokens=2000
             )
-            ans = comp.choices[0].message.content
-            memory[chat_id].append({"role": "user", "content": f"[Photo bheji: {user_text}]"})
+            ans = clean_think(comp.choices[0].message.content)
+            memory[chat_id].append({"role": "user", "content": f"[Photo: {user_text}]"})
             memory[chat_id].append({"role": "assistant", "content": ans})
             if "By Professor Bunti Royal Ji" not in ans: ans += "\n\nBy Professor Bunti Royal Ji"
             return ans
         except Exception as e:
-            print(f"Vision Error: {e}")
+            print(f"Vision failed: {e}")
+            return f"Photo ka analysis fail hua: {e}\nPhir se photo bhejo clear wali.\n\nBy Professor Bunti Royal Ji"
 
-    # NORMAL CHAT - Memory ke sath
+    # TEXT CHAT
     memory[chat_id].append({"role": "user", "content": user_text})
-    history = memory[chat_id][-12:]
-
-    system = f"You are SigAlpha AI. Owner is Professor Bunti Royal Ji. Talking to {name} {'(Owner)' if is_owner else ''}. Reply superfast, helpful, in Hinglish. Don't mention memory. End with 'By Professor Bunti Royal Ji'"
-
+    history = memory[chat_id][-10:]
     msgs = [{"role": "system", "content": system}] + history
+
     try:
-        c = groq_client.chat.completions.create(
-            model="openai/gpt-oss-20b",
-            messages=msgs
-        )
+        c = groq_client.chat.completions.create(model="openai/gpt-oss-20b", messages=msgs)
         ans = c.choices[0].message.content
         memory[chat_id].append({"role": "assistant", "content": ans})
         if "By Professor Bunti Royal Ji" not in ans: ans += "\n\nBy Professor Bunti Royal Ji"
         return ans
     except Exception as e:
-        print(e)
-        return f"Thoda technical issue hai bhai: {e}\n\nBy Professor Bunti Royal Ji"
+        print(f"Text Error: {e}")
+        return f"Error: {e}\n\nBy Professor Bunti Royal Ji"
 
 @app.route('/')
 def home(): return "SigAlpha Final Live"
@@ -92,33 +94,26 @@ def webhook():
         name = msg["from"].get("first_name","Dost")
         is_owner = msg["from"]["id"] == OWNER_ID
 
-        # 1. PHOTO HANDLE
         if "photo" in msg:
-            file_id = msg["photo"][-1]["file_id"] # sabse badi quality
+            file_id = msg["photo"][-1]["file_id"]
             caption = msg.get("caption", "")
-            send_msg(chat_id, f"Photo mil gayi {name} ji, analyse kar raha hu... 🔍")
             img_url = get_file_url(file_id)
+            send_msg(chat_id, f"Photo mil gayi {name} ji, analyse kar raha hu... 🔍")
             reply = get_reply(chat_id, name, caption, is_owner, img_url)
             send_msg(chat_id, reply)
             return "ok"
 
-        # 2. TEXT HANDLE
         if "text" in msg:
             text = msg["text"]
             if text == "/start":
                 memory[chat_id].clear()
-                if is_owner:
-                    welcome = random.choice(OWNER_WELCOMES)
-                else:
-                    welcome = random.choice(USER_WELCOMES).format(name=name)
+                welcome = random.choice(OWNER_WELCOMES) if is_owner else random.choice(USER_WELCOMES).format(name=name)
                 send_msg(chat_id, welcome + "\n\nBy Professor Bunti Royal Ji")
             elif text == "/clear":
                 memory[chat_id].clear()
                 send_msg(chat_id, "Clear ho gaya ji! ✅\n\nBy Professor Bunti Royal Ji")
             else:
-                reply = get_reply(chat_id, name, text, is_owner)
-                send_msg(chat_id, reply)
-
+                send_msg(chat_id, get_reply(chat_id, name, text, is_owner))
     except Exception as e:
         print(f"Webhook Error: {e}")
     return "ok"
